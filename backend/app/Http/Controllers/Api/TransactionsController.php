@@ -76,30 +76,71 @@ class TransactionsController extends Controller
         return response()->json($transaction->load(['customer', 'items', 'payments']));
     }
 
-    public function repay(Request $request, Transaction $transaction)
+    public function extend(Request $request, Transaction $transaction)
     {
         $validated = $request->validate([
-            'amount' => 'required|numeric|min:0',
-            'type' => 'required|in:interest_only,full_redemption'
+            'amount' => 'required|numeric|min:0', // Should match interest amount
+            'days' => 'required|integer|min:1',
         ]);
 
         return DB::transaction(function () use ($validated, $transaction, $request) {
+            // 1. Record Payment for Interest
             $payment = $transaction->payments()->create([
-                'payment_number' => 'PAY-' . date('Ymd') . '-' . strtoupper(Str::random(4)),
+                'payment_number' => 'PAY-EXT-' . date('Ymd') . '-' . strtoupper(Str::random(4)),
                 'amount' => $validated['amount'],
-                'payment_type' => $validated['type'],
+                'payment_type' => 'extension',
                 'payment_date' => now(),
                 'user_id' => $request->user()->id ?? 1,
             ]);
 
-            if ($validated['type'] === 'full_redemption') {
-                $transaction->update(['status' => 'completed', 'completed_at' => now()]);
-            } elseif ($validated['type'] === 'interest_only') {
-                // Extend due date logic here if needed
-                $transaction->update(['due_date' => $transaction->due_date->addDays(15)]); 
-            }
+            // 2. Calculate New Interest for next period (if applicable, or keep same)
+            // For now, assuming fixed interest for extension period
+            
+            // 3. Extend Due Date
+            $newDueDate = \Carbon\Carbon::parse($transaction->due_date)->addDays($validated['days']);
+            $transaction->update([
+                'due_date' => $newDueDate,
+                // 'interest_amount' => ... // Recalculate if needed
+            ]);
 
-            return response()->json($payment, 201);
+            return response()->json([
+                'message' => 'Transaction extended successfully',
+                'new_due_date' => $newDueDate,
+                'payment' => $payment
+            ]);
         });
+    }
+
+    public function repay(Request $request, Transaction $transaction)
+    {
+        $validated = $request->validate([
+            'amount' => 'required|numeric|min:0', // Should be loan + remaining interest
+        ]);
+
+        return DB::transaction(function () use ($validated, $transaction, $request) {
+            $payment = $transaction->payments()->create([
+                'payment_number' => 'PAY-PYM-' . date('Ymd') . '-' . strtoupper(Str::random(4)),
+                'amount' => $validated['amount'],
+                'payment_type' => 'full_redemption',
+                'payment_date' => now(),
+                'user_id' => $request->user()->id ?? 1,
+            ]);
+
+            $transaction->update([
+                'status' => 'completed', 
+                'completed_at' => now()
+            ]);
+
+            return response()->json([
+                'message' => 'Transaction repaied successfully',
+                'payment' => $payment
+            ]);
+        });
+    }
+
+    public function print(Transaction $transaction)
+    {
+        $transaction->load(['customer', 'items']);
+        return view('documents.pawn_ticket', compact('transaction'));
     }
 }

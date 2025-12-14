@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { LayoutDashboard, Users, Banknote, Package, LogOut, Menu } from 'lucide-react';
+import { LayoutDashboard, Users, Banknote, Package, LogOut, Menu, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 
@@ -12,6 +12,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const pathname = usePathname();
     const router = useRouter();
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            router.push('/login');
+        }
+    }, [router]);
 
     const handleLogout = async () => {
         try {
@@ -29,6 +36,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         { href: '/dashboard/customers', label: 'Nasabah', icon: Users },
         { href: '/dashboard/transactions', label: 'Transaksi Gadai', icon: Banknote },
         { href: '/dashboard/inventory', label: 'Barang Jaminan', icon: Package },
+        { href: '/dashboard/reports', label: 'Laporan', icon: FileText },
     ];
 
     return (
@@ -60,7 +68,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </nav>
 
                 <div className="p-4 border-t">
-                    <Button variant="destructive" variant="outline" className="w-full justify-start gap-2" onClick={handleLogout}>
+                    <Button variant="ghost" className="w-full justify-start gap-2 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={handleLogout}>
                         <LogOut className="h-5 w-5" />
                         {isSidebarOpen && <span>Logout</span>}
                     </Button>
