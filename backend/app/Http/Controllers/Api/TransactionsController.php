@@ -33,11 +33,12 @@ class TransactionsController extends Controller
             'items.*.name' => 'required|string',
             'items.*.category' => 'required|string',
             'items.*.estimated_value' => 'required|numeric',
+            'items.*.image' => 'nullable|image|max:10240', // Max 10MB
+            'items.*.grade' => 'nullable|string|in:A,B,C,D,E',
         ]);
 
         return DB::transaction(function () use ($validated, $request) {
-            // Calculate Interest (Example: 5% flat per 15 days)
-            // Simplified logic: 5% of loan amount
+            // Calculate Interest
             $interestRate = 5; 
             $interestAmount = $validated['loan_amount'] * ($interestRate / 100);
 
@@ -47,7 +48,7 @@ class TransactionsController extends Controller
             $transaction = Transaction::create([
                 'transaction_number' => 'TRX-' . date('Ymd') . '-' . strtoupper(Str::random(4)),
                 'customer_id' => $validated['customer_id'],
-                'user_id' => $request->user()->id ?? 1, // Fallback to 1 if not auth for dev
+                'user_id' => $request->user()->id ?? 1,
                 'status' => 'active',
                 'loan_amount' => $validated['loan_amount'],
                 'interest_rate' => $interestRate,
@@ -56,14 +57,26 @@ class TransactionsController extends Controller
                 'due_date' => $dueDate,
             ]);
 
-            foreach ($validated['items'] as $item) {
+            foreach ($validated['items'] as $index => $itemData) {
+                $photoPath = null;
+                
+                // Handle Image Upload
+                if ($request->hasFile("items.{$index}.image")) {
+                    $file = $request->file("items.{$index}.image");
+                    $filename = time() . '_' . Str::random(10) . '.' . $file->getClientOriginalExtension();
+                    $path = $file->storeAs('transaction_items', $filename, 'public');
+                    $photoPath = '/storage/' . $path;
+                }
+
                 $transaction->items()->create([
-                    'name' => $item['name'],
-                    'category' => $item['category'],
-                    'brand' => $item['brand'] ?? '-',
-                    'serial_number' => $item['serial_number'] ?? null,
-                    'description' => $item['description'] ?? '',
-                    'estimated_value' => $item['estimated_value'],
+                    'name' => $itemData['name'],
+                    'category' => $itemData['category'],
+                    'brand' => $itemData['brand'] ?? '-',
+                    'serial_number' => $itemData['serial_number'] ?? null,
+                    'description' => $itemData['description'] ?? '',
+                    'estimated_value' => $itemData['estimated_value'],
+                    'photo_path' => $photoPath,
+                    'grade' => $itemData['grade'] ?? null,
                 ]);
             }
 
